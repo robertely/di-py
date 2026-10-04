@@ -4,7 +4,6 @@ import httpx
 
 from difm import Client, DIFMAuthError, StreamQuality
 
-
 STATIONS = [
     {"id": 1, "key": "trance", "name": "Trance"},
     {"id": 2, "key": "chillout", "name": "Chillout"},
