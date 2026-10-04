@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import os
+from collections.abc import Iterable
 from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
 
 from ._common import (
+    _APP_AUTH,
     API_BASE,
     LISTEN_HOST,
     NETWORK,
-    _APP_AUTH,
     favorites_playlist_url,
+    favorites_playlist_urls,
+    match_favorite_stations,
     normalize_credentials,
     parse_stations,
     raise_for_response,
-    station_key_from_url,
     stream_playlist_url,
 )
 from .models import Credentials, Favorite, NowPlaying, Station, StreamQuality, Track
@@ -222,31 +223,24 @@ class Client:
                 "favorite_stations requires listen_key, or user_id plus API/session credentials"
             )
 
-        url = self.favorites_playlist_url()
-        response = self._http.get(url)
-        if not response.is_success:
-            legacy_url = (
-                f"{self.listen_host}/public3/favorites.pls?{self.listen_key}"
-            )
-            response = self._http.get(legacy_url)
+        response = None
+        url = ""
+        for candidate_url in favorites_playlist_urls(
+            self.listen_key,
+            listen_host=self.listen_host,
+        ):
+            response = self._http.get(candidate_url)
+            if response.is_success:
+                url = candidate_url
+                break
+
+        if response is None or not response.is_success:
+            if response is None:
+                raise RuntimeError("No favorites playlist URL candidates were generated")
             raise_for_response(response)
-            url = legacy_url
+
         entries = parse_playlist(response.text, url=url)
-
-        by_key = {station.key: station for station in all_stations}
-        by_name = {station.name.casefold(): station for station in all_stations}
-        result: list[Station] = []
-        seen: set[int] = set()
-
-        for entry in entries:
-            key = station_key_from_url(entry.url, by_key)
-            station = by_key.get(key or "")
-            if station is None and entry.title:
-                station = by_name.get(entry.title.casefold())
-            if station and station.id not in seen:
-                result.append(station)
-                seen.add(station.id)
-        return result
+        return match_favorite_stations(entries, all_stations, network=self.network)
 
     my_stations = favorite_stations
 
@@ -271,13 +265,19 @@ class Client:
             authenticated=True,
         )
 
-    def favorites_playlist_url(self, *, streamlist: str = "public3") -> str:
+    def favorites_playlist_url(
+        self,
+        *,
+        streamlist: str = "premium",
+        download: bool | None = None,
+    ) -> str:
         if not self.listen_key:
             raise ValueError("listen_key is required")
         return favorites_playlist_url(
             self.listen_key,
             listen_host=self.listen_host,
             streamlist=streamlist,
+            download=download,
         )
 
     def stream_playlist_url(
