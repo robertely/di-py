@@ -37,8 +37,8 @@ def stream_playlist_url(
 ) -> str:
     streamlist = normalize_quality(quality)
     return (
-        f"{listen_host.rstrip('/')}/{quote(streamlist)}/{quote(station_key)}.pls"
-        f"?listen_key={quote(listen_key)}"
+        f"{listen_host.rstrip('/')}/{quote(streamlist, safe='')}/"
+        f"{quote(station_key, safe='')}.pls?{urlencode({'listen_key': listen_key})}"
     )
 
 
@@ -189,6 +189,7 @@ def match_favorite_stations(
             seen.add(station.id)
 
     return result
+
 
 def normalize_credentials(payload: dict) -> Credentials:
     return Credentials.model_validate(payload)
