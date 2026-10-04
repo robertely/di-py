@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import os
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -50,6 +51,17 @@ class AsyncClient:
             base_url=self.api_base,
             timeout=timeout,
             follow_redirects=True,
+        )
+
+    @classmethod
+    def from_env(cls, prefix: str = "DIFM_") -> AsyncClient:
+        """Create a client from DIFM_LISTEN_KEY/API_KEY/SESSION_KEY/USER_ID."""
+        user_id = os.getenv(f"{prefix}USER_ID")
+        return cls(
+            listen_key=os.getenv(f"{prefix}LISTEN_KEY"),
+            session_key=os.getenv(f"{prefix}SESSION_KEY"),
+            api_key=os.getenv(f"{prefix}API_KEY"),
+            user_id=int(user_id) if user_id else None,
         )
 
     async def __aenter__(self) -> AsyncClient:
@@ -218,7 +230,13 @@ class AsyncClient:
 
         url = self.favorites_playlist_url()
         response = await self._http.get(url)
-        raise_for_response(response)
+        if not response.is_success:
+            legacy_url = (
+                f"{self.listen_host}/public3/favorites.pls?{self.listen_key}"
+            )
+            response = await self._http.get(legacy_url)
+            raise_for_response(response)
+            url = legacy_url
         entries = parse_playlist(response.text, url=url)
 
         by_key = {station.key: station for station in all_stations}
